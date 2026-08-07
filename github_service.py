@@ -118,6 +118,36 @@ class GitHubService:
                 except Exception:
                     pass
 
+                # Verificar Releases recientes
+                try:
+                    releases = repo.get_releases()[:2]
+                    for rel in releases:
+                        events.append({
+                            "type": "Release",
+                            "repo": repo.full_name,
+                            "tag_name": rel.tag_name,
+                            "title": rel.title or rel.tag_name,
+                            "author": rel.author.login if rel.author else "Unknown",
+                            "html_url": rel.html_url
+                        })
+                except Exception:
+                    pass
+
+                # Verificar Deployments recientes
+                try:
+                    deployments = repo.get_deployments()[:2]
+                    for dep in deployments:
+                        events.append({
+                            "type": "Deployment",
+                            "repo": repo.full_name,
+                            "id": dep.id,
+                            "environment": dep.environment,
+                            "creator": dep.creator.login if dep.creator else "Unknown",
+                            "html_url": f"https://github.com/{repo.full_name}/deployments"
+                        })
+                except Exception:
+                    pass
+
             return {"success": True, "events": events}
         except Exception as e:
             return {"success": False, "error": str(e)}

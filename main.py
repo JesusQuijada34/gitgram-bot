@@ -457,6 +457,31 @@ def check_notifications_job():
                             f"🔗 [Ver Issue]({ev['html_url']})"
                         )
                         notify_admin(msg)
+                elif ev["type"] == "Release":
+                    event_id = f"release_{ev['repo']}_{ev['tag_name']}"
+                    if event_id not in notified_events:
+                        notified_events.add(event_id)
+                        msg = (
+                            f"🚀 *¡Nuevo Release Publicado!*\n\n"
+                            f"📂 *Repo:* `{ev['repo']}`\n"
+                            f"🏷 *Tag:* `{ev['tag_name']}`\n"
+                            f"📌 *Título:* {ev['title']}\n"
+                            f"👤 *Autor:* `{ev['author']}`\n"
+                            f"🔗 [Ver Release]({ev['html_url']})"
+                        )
+                        notify_admin(msg)
+                elif ev["type"] == "Deployment":
+                    event_id = f"deployment_{ev['repo']}_{ev['id']}"
+                    if event_id not in notified_events:
+                        notified_events.add(event_id)
+                        msg = (
+                            f"🎯 *¡Evento de Despliegue (Deployment)!*\n\n"
+                            f"📂 *Repo:* `{ev['repo']}`\n"
+                            f"🌐 *Entorno:* `{ev['environment']}`\n"
+                            f"👤 *Creador:* `{ev['creator']}`\n"
+                            f"🔗 [Ver Deployments]({ev['html_url']})"
+                        )
+                        notify_admin(msg)
     except Exception as e:
         logger.error(f"Error en job de notificaciones: {e}")
 
