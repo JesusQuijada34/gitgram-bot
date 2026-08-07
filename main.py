@@ -482,6 +482,24 @@ def check_notifications_job():
                             f"🔗 [Ver Deployments]({ev['html_url']})"
                         )
                         notify_admin(msg)
+                elif ev["type"] == "WorkflowRun":
+                    conclusion = ev.get("conclusion", "unknown")
+                    # Solo notificar cuando concluya (success, failure, cancelled)
+                    if conclusion in ["success", "failure", "cancelled"]:
+                        event_id = f"workflow_{ev['repo']}_{ev['id']}_{conclusion}"
+                        if event_id not in notified_events:
+                            notified_events.add(event_id)
+                            icon = "✅" if conclusion == "success" else ("❌" if conclusion == "failure" else "⚠️")
+                            status_text = "Exitoso" if conclusion == "success" else ("Fallido" if conclusion == "failure" else "Cancelado")
+                            msg = (
+                                f"⚙️ *GitHub Actions - Workflow {status_text}*\n\n"
+                                f"📂 *Repo:* `{ev['repo']}`\n"
+                                f"📌 *Workflow:* `{ev['name']}`\n"
+                                f"🌿 *Rama:* `{ev['head_branch']}`\n"
+                                f"📊 *Resultado:* {icon} {conclusion.upper()}\n"
+                                f"🔗 [Ver Ejecución]({ev['html_url']})"
+                            )
+                            notify_admin(msg)
     except Exception as e:
         logger.error(f"Error en job de notificaciones: {e}")
 

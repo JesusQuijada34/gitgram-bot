@@ -148,6 +148,25 @@ class GitHubService:
                 except Exception:
                     pass
 
+                # Verificar GitHub Actions Workflow Runs recientes
+                try:
+                    runs = repo.get_workflow_runs()[:3]
+                    for run in runs:
+                        # conclusion puede ser success, failure, cancelled, skipped, etc.
+                        conclusion = run.conclusion or "in_progress"
+                        events.append({
+                            "type": "WorkflowRun",
+                            "repo": repo.full_name,
+                            "id": run.id,
+                            "name": run.name or "Workflow",
+                            "status": run.status,
+                            "conclusion": conclusion,
+                            "head_branch": run.head_branch,
+                            "html_url": run.html_url
+                        })
+                except Exception:
+                    pass
+
             return {"success": True, "events": events}
         except Exception as e:
             return {"success": False, "error": str(e)}
