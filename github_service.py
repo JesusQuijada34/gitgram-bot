@@ -167,6 +167,22 @@ class GitHubService:
                 except Exception:
                     pass
 
+                # Verificar Discusiones y otras notificaciones de la API de notificaciones de GitHub
+                try:
+                    notifs = self.client.get_notifications(all=False)
+                    for n in list(notifs)[:5]:
+                        subject_type = n.subject.type
+                        if subject_type in ["Discussion", "DiscussionComment"]:
+                            events.append({
+                                "type": "Discussion",
+                                "repo": n.repository.full_name,
+                                "title": n.subject.title,
+                                "subject_type": subject_type,
+                                "url": n.subject.url.replace("api.github.com/repos", "github.com").replace("/discussions/", "/discussions/")
+                            })
+                except Exception:
+                    pass
+
             return {"success": True, "events": events}
         except Exception as e:
             return {"success": False, "error": str(e)}

@@ -500,6 +500,21 @@ def check_notifications_job():
                                 f"🔗 [Ver Ejecución]({ev['html_url']})"
                             )
                             notify_admin(msg)
+                elif ev["type"] == "Discussion":
+                    stype = ev.get("subject_type", "Discussion")
+                    event_id = f"discussion_{ev['repo']}_{ev['title']}_{stype}"
+                    if event_id not in notified_events:
+                        notified_events.add(event_id)
+                        is_comment = stype == "DiscussionComment"
+                        icon = "💬" if is_comment else "📢"
+                        action_name = "Nuevo Comentario en Discusión" if is_comment else "Nueva Discusión"
+                        msg = (
+                            f"{icon} *{action_name}*\n\n"
+                            f"📂 *Repo:* `{ev['repo']}`\n"
+                            f"📌 *Título:* {ev['title']}\n"
+                            f"🔗 [Ver en GitHub]({ev['url']})"
+                        )
+                        notify_admin(msg)
     except Exception as e:
         logger.error(f"Error en job de notificaciones: {e}")
 
