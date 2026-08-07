@@ -186,3 +186,44 @@ class GitHubService:
             return {"success": True, "events": events}
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    def list_issues(self, repo_name: str, state: str = "open"):
+        """Lista issues de un repositorio."""
+        try:
+            repo = self.client.get_repo(repo_name)
+            issues = repo.get_issues(state=state, sort="updated", direction="desc")[:10]
+            results = []
+            for issue in issues:
+                if issue.pull_request:
+                    continue
+                results.append({
+                    "number": issue.number,
+                    "title": issue.title,
+                    "state": issue.state,
+                    "user": issue.user.login if issue.user else "Unknown",
+                    "html_url": issue.html_url,
+                    "created_at": issue.created_at.isoformat() if issue.created_at else ""
+                })
+            return {"success": True, "issues": results}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def comment_on_issue(self, repo_name: str, issue_number: int, body: str):
+        """Añade un comentario a un issue."""
+        try:
+            repo = self.client.get_repo(repo_name)
+            issue = repo.get_issue(number=issue_number)
+            comment = issue.create_comment(body)
+            return {"success": True, "comment_url": comment.html_url}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def close_issue(self, repo_name: str, issue_number: int):
+        """Cierra un issue."""
+        try:
+            repo = self.client.get_repo(repo_name)
+            issue = repo.get_issue(number=issue_number)
+            issue.edit(state="closed")
+            return {"success": True, "message": f"Issue #{issue_number} cerrado exitosamente."}
+        except Exception as e:
+            return {"success": False, "error": str(e)}

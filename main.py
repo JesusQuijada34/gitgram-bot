@@ -150,6 +150,93 @@ async def repos_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"❌ Error al obtener repositorios: `{str(e)}`", parse_mode="Markdown")
 
+async def issues_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    args = context.args
+    if not args:
+        await update.message.reply_text("⚠️ Uso correcto: `/issues usuario/repositorio`", parse_mode="Markdown")
+        return
+
+    repo_name = args[0]
+    account = GitHubAccount.get_or_none(GitHubAccount.user_id == user_id, GitHubAccount.is_active == True)
+    if not account:
+        await update.message.reply_text("❌ No tienes ninguna cuenta de GitHub activa. Usa `/login` primero.", parse_mode="Markdown")
+        return
+
+    gh = GitHubService(account.token)
+    res = gh.list_issues(repo_name)
+    if not res["success"]:
+        await update.message.reply_text(f"❌ Error al listar issues: `{res['error']}`", parse_mode="Markdown")
+        return
+
+    issues = res["issues"]
+    if not issues:
+        await update.message.reply_text(f"📭 No hay issues abiertos en `{repo_name}`.", parse_mode="Markdown")
+        return
+
+    text = f"📋 *Issues abiertos en `{repo_name}`:*\n\n"
+    for iss in issues:
+        text += f"• *#{iss['number']}*: [{iss['title']}]({iss['html_url']}) (Por `{iss['user']}`)\n"
+        text += f"  _Para comentar:_ `/comment {repo_name} {iss['number']} Tu mensaje`\n"
+        text += f"  _Para cerrar:_ `/close_issue {repo_name} {iss['number']}`\n\n"
+
+    await update.message.reply_text(text, parse_mode="Markdown", disable_web_page_preview=True)
+
+async def comment_issue_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    args = context.args
+    if len(args) < 3:
+        await update.message.reply_text("⚠️ Uso correcto: `/comment usuario/repositorio 123 Tu comentario aquí`", parse_mode="Markdown")
+        return
+
+    repo_name = args[0]
+    try:
+        issue_number = int(args[1])
+    except ValueError:
+        await update.message.reply_text("❌ El número de issue debe ser un entero.", parse_mode="Markdown")
+        return
+
+    body = " ".join(args[2:])
+    account = GitHubAccount.get_or_none(GitHubAccount.user_id == user_id, GitHubAccount.is_active == True)
+    if not account:
+        await update.message.reply_text("❌ No tienes ninguna cuenta de GitHub activa. Usa `/login` primero.", parse_mode="Markdown")
+        return
+
+    gh = GitHubService(account.token)
+    res = gh.comment_on_issue(repo_name, issue_number, body)
+    if res["success"]:
+        notify_admin(f"💬 Comentario añadido al issue #{issue_number} en `{repo_name}` por usuario `{user_id}`.")
+        await update.message.reply_text(f"✅ *¡Comentario publicado con éxito!*\n[Ver Comentario]({res['comment_url']})", parse_mode="Markdown", disable_web_page_preview=True)
+    else:
+        await update.message.reply_text(f"❌ Error al comentar en el issue: `{res['error']}`", parse_mode="Markdown")
+
+async def close_issue_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    args = context.args
+    if len(args) < 2:
+        await update.message.reply_text("⚠️ Uso correcto: `/close_issue usuario/repositorio 123`", parse_mode="Markdown")
+        return
+
+    repo_name = args[0]
+    try:
+        issue_number = int(args[1])
+    except ValueError:
+        await update.message.reply_text("❌ El número de issue debe ser un entero.", parse_mode="Markdown")
+        return
+
+    account = GitHubAccount.get_or_none(GitHubAccount.user_id == user_id, GitHubAccount.is_active == True)
+    if not account:
+        await update.message.reply_text("❌ No tienes ninguna cuenta de GitHub activa. Usa `/login` primero.", parse_mode="Markdown")
+        return
+
+    gh = GitHubService(account.token)
+    res = gh.close_issue(repo_name, issue_number)
+    if res["success"]:
+        notify_admin(f"🔒 Issue #{issue_number} cerrado en `{repo_name}` por usuario `{user_id}`.")
+        await update.message.reply_text(f"✅ *¡Issue #{issue_number} cerrado con éxito!*", parse_mode="Markdown")
+    else:
+        await update.message.reply_text(f"❌ Error al cerrar el issue: `{res['error']}`", parse_mode="Markdown")
+
 async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     ChatHistory.delete().where(ChatHistory.user_id == user_id).execute()
@@ -164,9 +251,12 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "2. **/setup_ai** - Configura tu API Key de Groq, Google Gemini u OpenAI.\n"
         "3. **/status** - Revisa el estado de tus cuentas y modelo de IA activo.\n"
         "4. **/repos** - Lista tus repositorios recientes con accesos directos.\n"
-        "5. **/clear** - Borra el historial de conversación con la IA.\n"
-        "6. **Subida ZIP:** Envía un archivo `.zip` al chat para hacer commit automático.\n"
-        "7. **Chat IA:** Envía cualquier mensaje de texto para interactuar con el agente."
+        "5. **/issues <repo>** - Lista issues abiertos de un repositorio.\n"
+        "6. **/comment <repo> <num> <texto>** - Responde/comenta en un issue.\n"
+        "7. **/close_issue <repo> <num>** - Cierra un issue directamente.\n"
+        "8. **/clear** - Borra el historial de conversación con la IA.\n"
+        "9. **Subida ZIP:** Envía un `.zip` al chat para commit automático.\n"
+        "10. **Chat IA:** Envía cualquier mensaje para interactuar con el agente."
     )
     await update.message.reply_text(text, parse_mode="Markdown")
 
@@ -554,6 +644,9 @@ def main():
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("status", status_command))
     app.add_handler(CommandHandler("repos", repos_command))
+    app.add_handler(CommandHandler("issues", issues_command))
+    app.add_handler(CommandHandler("comment", comment_issue_command))
+    app.add_handler(CommandHandler("close_issue", close_issue_command))
     app.add_handler(CommandHandler("clear", clear_command))
     app.add_handler(CommandHandler("accounts", accounts_command))
 
