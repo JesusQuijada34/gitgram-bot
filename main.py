@@ -101,6 +101,30 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text(text, parse_mode="Markdown", reply_markup=reply_markup)
 
+async def me_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Alias global de /status para consultar el estado de la cuenta."""
+    await status_command(update, context)
+
+
+async def revoke_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Revoca la cuenta de GitHub activa del usuario."""
+    user_id = update.effective_user.id
+    account = GitHubAccount.get_or_none(
+        (GitHubAccount.user_id == user_id) & (GitHubAccount.is_active == True)
+    )
+    if not account:
+        await update.message.reply_text("❌ No tienes una cuenta de GitHub activa para revocar.", parse_mode="Markdown")
+        return
+
+    account.is_active = False
+    account.save()
+    notify_admin(f"🔐 Usuario `{user_id}` revocó su cuenta activa de GitHub.")
+    await update.message.reply_text(
+        f"✅ La cuenta `{account.username}` fue revocada y desactivada.",
+        parse_mode="Markdown",
+    )
+
+
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     notify_admin(f"📊 Usuario `{user_id}` consultó su estado (`/status`).")
@@ -649,6 +673,8 @@ def main():
     app.add_handler(CommandHandler("close_issue", close_issue_command))
     app.add_handler(CommandHandler("clear", clear_command))
     app.add_handler(CommandHandler("accounts", accounts_command))
+    app.add_handler(CommandHandler("me", me_command))
+    app.add_handler(CommandHandler("revoke", revoke_command))
 
     # ConversationHandler para Login GitHub
     login_handler = ConversationHandler(
@@ -657,7 +683,19 @@ def main():
             WAITING_ALIAS: [MessageHandler(filters.TEXT & ~filters.COMMAND, login_received_alias)],
             WAITING_TOKEN: [MessageHandler(filters.TEXT & ~filters.COMMAND, login_received_token)],
         },
-        fallbacks=[CommandHandler("cancel", cancel_conversation)],
+        fallbacks=[
+            CommandHandler("cancel", cancel_conversation),
+            CommandHandler("start", start),
+            CommandHandler("me", me_command),
+            CommandHandler("accounts", accounts_command),
+            CommandHandler("setup_ai", setup_ai_start),
+            CommandHandler("revoke", revoke_command),
+            CommandHandler("help", help_command),
+            CommandHandler("status", status_command),
+            CommandHandler("repos", repos_command),
+            CommandHandler("clear", clear_command),
+        ],
+        per_message=False,
     )
     app.add_handler(login_handler)
 
@@ -668,7 +706,19 @@ def main():
             WAITING_AI_PROVIDER: [CallbackQueryHandler(setup_ai_provider, pattern="^ai_")],
             WAITING_AI_KEY: [MessageHandler(filters.TEXT & ~filters.COMMAND, setup_ai_key)],
         },
-        fallbacks=[CommandHandler("cancel", cancel_conversation)],
+        fallbacks=[
+            CommandHandler("cancel", cancel_conversation),
+            CommandHandler("start", start),
+            CommandHandler("me", me_command),
+            CommandHandler("accounts", accounts_command),
+            CommandHandler("setup_ai", setup_ai_start),
+            CommandHandler("revoke", revoke_command),
+            CommandHandler("help", help_command),
+            CommandHandler("status", status_command),
+            CommandHandler("repos", repos_command),
+            CommandHandler("clear", clear_command),
+        ],
+        per_message=False,
     )
     app.add_handler(ai_handler)
 
@@ -678,7 +728,19 @@ def main():
         states={
             WAITING_ZIP_REPO: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_zip_repo)],
         },
-        fallbacks=[CommandHandler("cancel", cancel_conversation)],
+        fallbacks=[
+            CommandHandler("cancel", cancel_conversation),
+            CommandHandler("start", start),
+            CommandHandler("me", me_command),
+            CommandHandler("accounts", accounts_command),
+            CommandHandler("setup_ai", setup_ai_start),
+            CommandHandler("revoke", revoke_command),
+            CommandHandler("help", help_command),
+            CommandHandler("status", status_command),
+            CommandHandler("repos", repos_command),
+            CommandHandler("clear", clear_command),
+        ],
+        per_message=False,
     )
     app.add_handler(zip_handler)
 

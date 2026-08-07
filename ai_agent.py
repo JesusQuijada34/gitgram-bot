@@ -1,5 +1,5 @@
+from google import genai
 from groq import Groq
-import google.generativeai as genai
 from openai import OpenAI
 
 class AIAgent:
@@ -26,17 +26,22 @@ class AIAgent:
                 return response.choices[0].message.content
 
             elif self.provider == "gemini":
-                genai.configure(api_key=self.api_key)
-                model = genai.GenerativeModel('gemini-1.5-flash')
-                
-                # Convertir historial al formato de Gemini si es necesario o usar chat session
-                chat_history = []
+                client = genai.Client(api_key=self.api_key)
+                contents = []
                 for h in history:
-                    r = "user" if h["role"] == "user" else "model"
-                    chat_history.append({"role": r, "parts": [h["content"]]})
-                
-                chat = model.start_chat(history=chat_history)
-                response = chat.send_message(prompt)
+                    role = "user" if h["role"] == "user" else "model"
+                    contents.append({
+                        "role": role,
+                        "parts": [{"text": h["content"]}],
+                    })
+                contents.append({
+                    "role": "user",
+                    "parts": [{"text": prompt}],
+                })
+                response = client.models.generate_content(
+                    model="gemini-2.0-flash",
+                    contents=contents,
+                )
                 return response.text
 
             elif self.provider == "openai":
