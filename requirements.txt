@@ -1,0 +1,10 @@
+python-telegram-bot>=20.0
+PyGithub>=1.59.0
+peewee>=3.16.0
+APScheduler>=3.10.4
+groq>=0.4.2
+google-generativeai>=0.3.2
+openai>=1.10.0
+requests>=2.31.0
+python-dotenv>=1.0.0
+flask>=3.0.0

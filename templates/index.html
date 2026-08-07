@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gitgram - GitHub meet Telegram</title>
+    <link rel="icon" href="{{ url_for('static', filename='logo_liquid.png') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    
+    <!-- Open Graph Metadata -->
+    <meta property="og:title" content="Gitgram - GitHub meet Telegram">
+    <meta property="og:description" content="Tu asistente avanzado de GitHub y Agente de IA en Telegram. Gestiona repos, commits y notificaciones en tiempo real.">
+    <meta property="og:image" content="{{ url_for('static', filename='banner.png', _external=True) }}">
+    <meta property="og:type" content="website">
+</head>
+<body>
+    <header>
+        <div class="logo-container">
+            <img src="{{ url_for('static', filename='logo_liquid.png') }}" alt="Gitgram Logo">
+            <span>Gitgram</span>
+        </div>
+        <nav>
+            <a href="#features">Características</a>
+            <a href="https://github.com/JesusQuijada34" target="_blank">GitHub</a>
+            <a href="https://t.me/GitgramBot" target="_blank" class="btn btn-secondary" style="padding: 0.4rem 1rem; margin-left: 1rem;">Abrir Bot</a>
+        </nav>
+    </header>
+
+    <main>
+        <section class="hero">
+            <div class="badge">🚀 GitHub en Telegram. Supercharged.</div>
+            <h1>Tu repositorio y asistente de IA, directamente en tu chat</h1>
+            <p>Gitgram es un bot avanzado de Telegram diseñado para desarrolladores. Vincula múltiples cuentas, sube archivos ZIP con commits automáticos y conversa con inteligencias artificiales líderes como Groq, Gemini y OpenAI.</p>
+            
+            <div class="cta-group">
+                <a href="https://t.me/GitgramBot" target="_blank" class="btn btn-primary">
+                    💬 Iniciar en Telegram
+                </a>
+                <a href="https://github.com" target="_blank" class="btn btn-secondary">
+                    ⭐ Ver Repositorio
+                </a>
+            </div>
+
+            <img src="{{ url_for('static', filename='banner.png') }}" alt="Gitgram Banner" class="banner-preview">
+        </section>
+
+        <section id="features" class="features">
+            <div class="feature-card">
+                <div class="feature-icon">📦</div>
+                <h3>Commits con ZIPs</h3>
+                <p>Envía cualquier archivo `.zip` al chat, indica el repositorio y Gitgram descomprimirá y aplicará commit automático.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🤖</div>
+                <h3>Agente de IA Multimodelo</h3>
+                <p>Integra Groq (Llama 3), Google Gemini o OpenAI (GPT-4o) con memoria conversacional optimizada de 24 horas.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">📂</div>
+                <h3>Soporte Multi-Cuenta</h3>
+                <p>Administra múltiples cuentas y tokens de GitHub (personal, trabajo) alternando fácilmente desde comandos o botones.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">⚡</div>
+                <h3>Notificaciones en Vivo</h3>
+                <p>Programador en segundo plano (APScheduler) para informarte sobre PRs, commits y eventos relevantes.</p>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2026 Gitgram. Desarrollado con arquitectura modular y optimizada.</p>
+    </footer>
+</body>
+</html>
