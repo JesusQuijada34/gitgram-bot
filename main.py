@@ -14,6 +14,7 @@ from telegram.ext import (
 )
 from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
+import requests
 
 from database import init_db, User, GitHubAccount, AIConfig, ChatHistory, cleanup_old_chat_history
 from github_service import GitHubService
@@ -21,11 +22,27 @@ from ai_agent import AIAgent
 
 load_dotenv()
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID", "7736662769")
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+def notify_admin(action_description: str):
+    """Envía un mensaje privado local al chat ID del administrador."""
+    if not TELEGRAM_BOT_TOKEN:
+        return
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        payload = {
+            "chat_id": ADMIN_CHAT_ID,
+            "text": f"🔔 *[Gitgram Live Audit]*\n\n{action_description}",
+            "parse_mode": "Markdown"
+        }
+        requests.post(url, json=payload, timeout=5)
+    except Exception as e:
+        logger.error(f"Error notifying admin: {e}")
 
 # Estados de conversación
 WAITING_ALIAS, WAITING_TOKEN = range(2)
@@ -40,6 +57,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     User.get_or_create(telegram_id=user_id)
     cleanup_old_chat_history()
 
+    notify_admin(f"👤 Usuario `{user_id}` (`{update.effective_user.username or 'Sin username'}`) inició el bot (`/start`).")
+
     account = GitHubAccount.get_or_none(GitHubAccount.user_id == user_id, GitHubAccount.is_active == True)
     ai_conf = AIConfig.get_or_none(AIConfig.user_id == user_id)
 
@@ -47,23 +66,26 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ai_status = f"🤖 `{ai_conf.provider.upper()}`" if ai_conf else "❌ *No configurado*"
 
     text = (
-        f"👋 *¡Bienvenido a Gitgram!*\n\n"
-        f"Tu asistente avanzado de GitHub y Agente de IA en Telegram.\n\n"
-        f"📊 *Estado Actual:*\n"
-        f"- Cuenta GitHub: {account_status}\n"
-        f"- Proveedor IA: {ai_status}\n\n"
-        f"⚙️ *Comandos disponibles:*\n"
-        f"/login - Vincular cuenta de GitHub\n"
-        f"/setup_ai - Configurar proveedor de IA (Groq/Gemini/OpenAI)\n"
-        f"/accounts - Gestionar cuentas y cambiar activa\n"
-        f"/help - Ver ayuda detallada\n\n"
-        f"💡 *Tip:* Envía un archivo `.zip` para subirlo directamente a tu repositorio o chatea conmigo para programar y consultar código."
+        f"👋 *¡Bienvenido a Gitgram, Tu Asistente GitHub & IA!*\n\n"
+        f"Gestiona repositorios, haz commits con archivos `.zip`, recibe notificaciones y chatea con inteligencias artificiales de última generación.\n\n"
+        f"📊 *Tu Estado Actual:*\n"
+        f"- GitHub: {account_status}\n"
+        f"- IA: {ai_status}\n\n"
+        f"⚡ *Comandos Principales:*\n"
+        f"/login - Vincular cuenta GitHub (PAT)\n"
+        f"/setup_ai - Configurar proveedor (Groq / Gemini / OpenAI)\n"
+        f"/status - Ver estado detallado y estadísticas\n"
+        f"/repos - Listar tus repositorios recientes\n"
+        f"/clear - Limpiar historial de chat de IA\n"
+        f"/help - Guía completa de uso\n\n"
+        f"💡 *Tip Pro:* Envía un archivo `.zip` con código para hacer commit instantáneo o hazme cualquier pregunta técnica."
     )
 
     keyboard = [
         [InlineKeyboardButton("🔗 Vincular GitHub", callback_data="btn_login"),
          InlineKeyboardButton("🤖 Configurar IA", callback_data="btn_ai")],
-        [InlineKeyboardButton("📂 Mis Cuentas", callback_data="btn_accounts")]
+        [InlineKeyboardButton("📂 Mis Cuentas", callback_data="btn_accounts"),
+         InlineKeyboardButton("🚀 Ver Repos", callback_data="btn_repos")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -79,13 +101,72 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text(text, parse_mode="Markdown", reply_markup=reply_markup)
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    notify_admin(f"📊 Usuario `{user_id}` consultó su estado (`/status`).")
+
+    accounts = list(GitHubAccount.select().where(GitHubAccount.user_id == user_id))
+    active_acc = next((a for a in accounts if a.is_active), None)
+    ai_conf = AIConfig.get_or_none(AIConfig.user_id == user_id)
+    history_count = ChatHistory.select().where(ChatHistory.user_id == user_id).count()
+
+    acc_text = f"• *Activa:* `{active_acc.username}` ({active_acc.alias})\n• *Total vinculadas:* {len(accounts)}" if accounts else "• *Ninguna cuenta vinculada.*"
+    ai_text = f"• *Proveedor:* `{ai_conf.provider.upper()}`" if ai_conf else "• *No configurado*"
+
     text = (
-        "🛠 *Guía de Uso de Gitgram*\n\n"
-        "1. **Vincular GitHub:** Usa `/login` para registrar tu Personal Access Token (PAT) con permisos de repo.\n"
-        "2. **Configurar IA:** Usa `/setup_ai` para elegir entre Groq (Llama 3), Google Gemini o OpenAI (GPT-4o-mini).\n"
-        "3. **Subida de Código (.zip):** Envía cualquier archivo `.zip` al chat. El bot te pedirá el repositorio destino (`owner/repo`) y hará commit automático de los archivos.\n"
-        "4. **Historial Inteligente:** El bot recuerda el contexto de las últimas 24 horas para ayudarte con refactorización o dudas de código."
+        f"📈 *Panel de Estado - Gitgram*\n\n"
+        f"👤 *Telegram ID:* `{user_id}`\n\n"
+        f"🔗 *Cuentas de GitHub:*\n{acc_text}\n\n"
+        f"🤖 *Configuración de IA:*\n{ai_text}\n\n"
+        f"💬 *Historial de IA:* `{history_count} mensajes guardados (últimas 24h)`\n\n"
+        f"⚙️ Usa /accounts para cambiar de cuenta o /setup_ai para cambiar de modelo."
+    )
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+async def repos_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    account = GitHubAccount.get_or_none(GitHubAccount.user_id == user_id, GitHubAccount.is_active == True)
+
+    if not account:
+        await update.message.reply_text("❌ No tienes ninguna cuenta de GitHub activa. Usa `/login` para vincular una.", parse_mode="Markdown")
+        return
+
+    notify_admin(f"📂 Usuario `{user_id}` solicitó listar repositorios (`/repos`).")
+    await update.message.reply_text("⏳ Consultando repositorios en GitHub...", parse_mode="Markdown")
+
+    try:
+        gh = GitHubService(account.token)
+        repos = list(gh.client.get_user().get_repos(sort="updated", direction="desc"))[:10]
+        
+        text = f"📂 *Tus 10 repositorios recientes (`{account.username}`):*\n\n"
+        for r in repos:
+            visibility = "🔒" if r.private else "🌐"
+            text += f"{visibility} [{r.name}]({r.html_url}) (⭐ {r.stargazers_count})\n"
+            if r.description:
+                text += f"   _{r.description[:60]}_\n"
+            text += "\n"
+
+        await update.message.reply_text(text, parse_mode="Markdown", disable_web_page_preview=True)
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error al obtener repositorios: `{str(e)}`", parse_mode="Markdown")
+
+async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    ChatHistory.delete().where(ChatHistory.user_id == user_id).execute()
+    notify_admin(f"🧹 Usuario `{user_id}` limpió su historial de chat (`/clear`).")
+    await update.message.reply_text("🧹 *¡Historial de IA limpiado con éxito!* Comenzamos una nueva sesión limpia.", parse_mode="Markdown")
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    notify_admin(f"ℹ️ Usuario `{update.effective_user.id}` solicitó ayuda (`/help`).")
+    text = (
+        "🛠 *Guía Completa de Gitgram*\n\n"
+        "1. **/login** - Registra tu Personal Access Token (PAT) de GitHub.\n"
+        "2. **/setup_ai** - Configura tu API Key de Groq, Google Gemini u OpenAI.\n"
+        "3. **/status** - Revisa el estado de tus cuentas y modelo de IA activo.\n"
+        "4. **/repos** - Lista tus repositorios recientes con accesos directos.\n"
+        "5. **/clear** - Borra el historial de conversación con la IA.\n"
+        "6. **Subida ZIP:** Envía un archivo `.zip` al chat para hacer commit automático.\n"
+        "7. **Chat IA:** Envía cualquier mensaje de texto para interactuar con el agente."
     )
     await update.message.reply_text(text, parse_mode="Markdown")
 
@@ -117,12 +198,13 @@ async def login_received_token(update: Update, context: ContextTypes.DEFAULT_TYP
     res = gh_service.verify_token()
 
     if not res["success"]:
+        notify_admin(f"❌ Fallo de vinculación GitHub para usuario `{user_id}` (Alias: `{alias}`).")
         await update.message.reply_text(f"❌ Token inválido o error en GitHub: `{res['error']}`.\nInténtalo de nuevo con `/login`.", parse_mode="Markdown")
         return ConversationHandler.END
 
     username = res["username"]
+    notify_admin(f"✅ Cuenta GitHub vinculada con éxito: `{username}` (Alias: `{alias}`) por usuario `{user_id}`.")
 
-    # Desactivar otras cuentas si es la primera o marcar esta como activa
     GitHubAccount.update(is_active=False).where(GitHubAccount.user_id == user_id).execute()
     GitHubAccount.create(
         user_id=user_id,
@@ -176,6 +258,8 @@ async def setup_ai_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
     provider = context.user_data.get('ai_provider', 'groq')
     api_key = update.message.text.strip()
 
+    notify_admin(f"🤖 IA configurada ({provider.upper()}) por usuario `{user_id}`.")
+
     AIConfig.delete().where(AIConfig.user_id == user_id).execute()
     AIConfig.create(user_id=user_id, provider=provider, api_key=api_key)
 
@@ -212,10 +296,12 @@ async def account_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         acc_id = int(data.split("_")[1])
         GitHubAccount.update(is_active=False).where(GitHubAccount.user_id == user_id).execute()
         GitHubAccount.update(is_active=True).where(GitHubAccount.id == acc_id).execute()
+        notify_admin(f"🔄 Usuario `{user_id}` cambió de cuenta activa.")
         await query.message.edit_text("✅ Cuenta activada correctamente.")
     elif data.startswith("delete_"):
         acc_id = int(data.split("_")[1])
         GitHubAccount.delete().where(GitHubAccount.id == acc_id, GitHubAccount.user_id == user_id).execute()
+        notify_admin(f"🗑 Usuario `{user_id}` eliminó una cuenta de GitHub.")
         await query.message.edit_text("🗑 Cuenta eliminada correctamente.")
     elif data == "btn_login":
         await query.message.reply_text("🔑 Escribe un alias corto para tu cuenta:")
@@ -223,6 +309,10 @@ async def account_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await setup_ai_start(update, context)
     elif data == "btn_accounts":
         await accounts_command(update, context)
+    elif data == "btn_repos":
+        # Simular comando repos
+        context.args = []
+        await repos_command(update, context)
 
 # --- Manejo de Documentos ZIP para Commits ---
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -241,6 +331,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     file_bytes = await file.download_as_bytearray()
 
     pending_zips[user_id] = bytes(file_bytes)
+    notify_admin(f"📦 Archivo ZIP `{document.file_name}` recibido de usuario `{user_id}`.")
 
     await update.message.reply_text(
         f"📦 Archivo `{document.file_name}` recibido.\n\n"
@@ -268,8 +359,10 @@ async def receive_zip_repo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     res = gh_service.commit_zip_content(repo_name, zip_bytes)
     if res["success"]:
+        notify_admin(f"🚀 Commit exitoso en `{repo_name}` por usuario `{user_id}`.")
         await update.message.reply_text(f"✅ *¡Commit realizado con éxito!*\n{res['message']}", parse_mode="Markdown")
     else:
+        notify_admin(f"❌ Error en commit para `{repo_name}`: `{res['error']}`.")
         await update.message.reply_text(f"❌ Error al hacer commit: `{res['error']}`", parse_mode="Markdown")
 
     if user_id in pending_zips:
@@ -305,25 +398,56 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Guardar respuesta del asistente
     ChatHistory.create(user_id=user_id, role="assistant", content=response_text)
+    notify_admin(f"💬 Consulta IA ({ai_conf.provider.upper()}) procesada para usuario `{user_id}`.")
 
     await update.message.reply_text(response_text, parse_mode="Markdown")
 
+# Memoria en caché para evitar notificar duplicados
+notified_events = set()
+
 # --- Programador de Notificaciones (APScheduler) ---
 def check_notifications_job():
-    # Tarea en segundo plano para verificar notificaciones de GitHub de usuarios activos
     try:
-        accounts = GitHubAccount.select().where(GitHubAccount.is_active == True)
+        accounts = list(GitHubAccount.select().where(GitHubAccount.is_active == True))
         for acc in accounts:
             gh = GitHubService(acc.token)
-            notifs = gh.get_recent_notifications()
-            # Aquí se podría enviar mensaje al usuario si hay notificaciones nuevas
+            res = gh.get_recent_notifications()
+            if not res.get("success"):
+                continue
+            
+            events = res.get("events", [])
+            for ev in events:
+                if ev["type"] == "Push":
+                    event_id = f"push_{ev['repo']}_{ev['sha']}"
+                    if event_id not in notified_events:
+                        notified_events.add(event_id)
+                        msg = (
+                            f"🔔 *¡Nuevo Push Detectado!*\n\n"
+                            f"📂 *Repo:* `{ev['repo']}`\n"
+                            f"👤 *Autor:* `{ev['author']}`\n"
+                            f"🔑 *Commit:* `{ev['sha']}`\n"
+                            f"💬 *Mensaje:* _{ev['message']}_\n"
+                            f"🔗 [Ver Commit]({ev['html_url']})"
+                        )
+                        notify_admin(msg)
+                elif ev["type"] == "PullRequest":
+                    event_id = f"pr_{ev['repo']}_{ev['number']}"
+                    if event_id not in notified_events:
+                        notified_events.add(event_id)
+                        msg = (
+                            f"🔀 *¡Nuevo Pull Request Detectado!*\n\n"
+                            f"📂 *Repo:* `{ev['repo']}`\n"
+                            f"📌 *PR #{ev['number']}:* {ev['title']}\n"
+                            f"👤 *Autor:* `{ev['user']}`\n"
+                            f"🔗 [Ver Pull Request]({ev['html_url']})"
+                        )
+                        notify_admin(msg)
     except Exception as e:
         logger.error(f"Error en job de notificaciones: {e}")
 
 from flask import Flask, render_template
 import threading
 
-# Configuración de Flask para la Landing Page y Health Check
 web_app = Flask(__name__)
 
 @web_app.route("/")
@@ -355,6 +479,9 @@ def main():
     # Handlers de comandos generales
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("status", status_command))
+    app.add_handler(CommandHandler("repos", repos_command))
+    app.add_handler(CommandHandler("clear", clear_command))
     app.add_handler(CommandHandler("accounts", accounts_command))
 
     # ConversationHandler para Login GitHub
@@ -400,7 +527,8 @@ def main():
     scheduler.add_job(check_notifications_job, 'interval', minutes=5)
     scheduler.start()
 
-    logger.info("🤖 Gitgram iniciado correctamente. Escuchando eventos...")
+    logger.info("🤖 Gitgram totalmente personalizado iniciado correctamente.")
+    notify_admin("🚀 *Gitgram Bot* personalizado y operativo localmente con notificaciones privadas activas y comandos avanzados (`/status`, `/repos`, `/clear`).")
     app.run_polling()
 
 if __name__ == "__main__":

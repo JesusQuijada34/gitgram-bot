@@ -61,18 +61,41 @@ class GitHubService:
             return {"success": False, "error": f"Error procesando el archivo ZIP: {str(e)}"}
 
     def get_recent_notifications(self):
-        """Obtiene notificaciones recientes del usuario de GitHub."""
+        """Consulta eventos recientes de Push y Pull Requests en los repositorios del usuario."""
         try:
-            notifs = self.client.get_notifications(all=False)
-            results = []
-            for n in list(notifs)[:5]: # últimas 5
-                results.endswith if hasattr(results, 'endswith') else None # dummy
-                results.append({
-                    "title": n.subject.title,
-                    "type": n.subject.type,
-                    "repository": n.repository.full_name,
-                    "url": n.subject.url
-                })
-            return {"success": True, "notifications": results}
+            user = self.client.get_user()
+            events = []
+            for repo in user.get_repos(sort="updated", direction="desc")[:5]:
+                # Verificar Pull Requests abiertos
+                try:
+                    prs = repo.get_pulls(state="open", sort="updated", direction="desc")[:3]
+                    for pr in prs:
+                        events.append({
+                            "type": "PullRequest",
+                            "repo": repo.full_name,
+                            "title": pr.title,
+                            "number": pr.number,
+                            "user": pr.user.login,
+                            "html_url": pr.html_url
+                        })
+                except Exception:
+                    pass
+
+                # Verificar commits recientes (Push)
+                try:
+                    commits = repo.get_commits()[:3]
+                    for commit in commits:
+                        events.append({
+                            "type": "Push",
+                            "repo": repo.full_name,
+                            "sha": commit.sha[:7],
+                            "message": commit.commit.message.split("\n")[0],
+                            "author": commit.commit.author.name if commit.commit.author else "Unknown",
+                            "html_url": commit.html_url
+                        })
+                except Exception:
+                    pass
+
+            return {"success": True, "events": events}
         except Exception as e:
             return {"success": False, "error": str(e)}
