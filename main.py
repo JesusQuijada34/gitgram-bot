@@ -67,7 +67,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await update.message.reply_text(text, parse_mode="Markdown", reply_markup=reply_markup)
+    splash_path = os.path.join("static", "splash_banner.png")
+    if os.path.exists(splash_path):
+        with open(splash_path, "rb") as photo:
+            await update.message.reply_photo(
+                photo=photo,
+                caption=text,
+                parse_mode="Markdown",
+                reply_markup=reply_markup
+            )
+    else:
+        await update.message.reply_text(text, parse_mode="Markdown", reply_markup=reply_markup)
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
