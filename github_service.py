@@ -61,22 +61,44 @@ class GitHubService:
             return {"success": False, "error": f"Error procesando el archivo ZIP: {str(e)}"}
 
     def get_recent_notifications(self):
-        """Consulta eventos recientes de Push y Pull Requests en los repositorios del usuario."""
+        """Consulta eventos recientes de Push, Pull Requests (abiertos y cerrados) e Issues en los repositorios del usuario."""
         try:
             user = self.client.get_user()
             events = []
             for repo in user.get_repos(sort="updated", direction="desc")[:5]:
-                # Verificar Pull Requests abiertos
+                # Verificar Pull Requests (abiertos y cerrados recientemente)
                 try:
-                    prs = repo.get_pulls(state="open", sort="updated", direction="desc")[:3]
+                    prs = repo.get_pulls(state="all", sort="updated", direction="desc")[:4]
                     for pr in prs:
+                        pr_state = "Closed" if pr.closed_at else "Open"
+                        if pr.is_merged():
+                            pr_state = "Merged"
                         events.append({
                             "type": "PullRequest",
                             "repo": repo.full_name,
                             "title": pr.title,
                             "number": pr.number,
                             "user": pr.user.login,
+                            "state": pr_state,
                             "html_url": pr.html_url
+                        })
+                except Exception:
+                    pass
+
+                # Verificar Issues recientes
+                try:
+                    issues = repo.get_issues(state="open", sort="updated", direction="desc")[:3]
+                    for issue in issues:
+                        # Filtrar para no incluir Pull Requests que aparecen en issues API
+                        if issue.pull_request:
+                            continue
+                        events.append({
+                            "type": "Issue",
+                            "repo": repo.full_name,
+                            "title": issue.title,
+                            "number": issue.number,
+                            "user": issue.user.login if issue.user else "Unknown",
+                            "html_url": issue.html_url
                         })
                 except Exception:
                     pass

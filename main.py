@@ -431,15 +431,30 @@ def check_notifications_job():
                         )
                         notify_admin(msg)
                 elif ev["type"] == "PullRequest":
-                    event_id = f"pr_{ev['repo']}_{ev['number']}"
+                    state = ev.get("state", "Open")
+                    event_id = f"pr_{ev['repo']}_{ev['number']}_{state}"
                     if event_id not in notified_events:
                         notified_events.add(event_id)
+                        icon = "🟢" if state == "Open" else ("🟣" if state == "Merged" else "🔴")
                         msg = (
-                            f"🔀 *¡Nuevo Pull Request Detectado!*\n\n"
+                            f"🔀 *¡Pull Request {state}!*\n\n"
                             f"📂 *Repo:* `{ev['repo']}`\n"
                             f"📌 *PR #{ev['number']}:* {ev['title']}\n"
                             f"👤 *Autor:* `{ev['user']}`\n"
+                            f"📊 *Estado:* {icon} {state}\n"
                             f"🔗 [Ver Pull Request]({ev['html_url']})"
+                        )
+                        notify_admin(msg)
+                elif ev["type"] == "Issue":
+                    event_id = f"issue_{ev['repo']}_{ev['number']}"
+                    if event_id not in notified_events:
+                        notified_events.add(event_id)
+                        msg = (
+                            f"⚠️ *¡Nuevo Issue Creado!*\n\n"
+                            f"📂 *Repo:* `{ev['repo']}`\n"
+                            f"📌 *Issue #{ev['number']}:* {ev['title']}\n"
+                            f"👤 *Autor:* `{ev['user']}`\n"
+                            f"🔗 [Ver Issue]({ev['html_url']})"
                         )
                         notify_admin(msg)
     except Exception as e:
