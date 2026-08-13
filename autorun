@@ -1,0 +1,3 @@
+#!/usr/bin/env sh
+# Autorun script for gitgram-bot
+/usr/bin/python3 ./gitgram-bot.py
