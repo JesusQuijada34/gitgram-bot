@@ -19,13 +19,21 @@ El proyecto sigue una estructura limpia y modular basada en servicios independie
 
 ---
 
+## Clasificación PackageMaker
+
+Gitgram se distribuye como **AlphaCube**: es código fuente de un bot que requiere Python, servicios externos, secretos de Telegram/GitHub/IA y un proceso persistente. No es un binario autónomo para Danenone o Knosthalij.
+
+## Endurecimiento aplicado
+
+Las cargas ZIP están limitadas a 50 MB, cada archivo a 10 MB y el contenido total a 40 MB. Se rechazan nombres de archivo inseguros, rutas absolutas y componentes de traversal antes de ejecutar commits. El bot intenta borrar los mensajes que contienen PAT de GitHub y API keys de IA; para que esa limpieza funcione, necesita permisos de administración en el chat. Las credenciales no deben incluirse en el repositorio ni en logs.
+
 ## ⚙️ Variables de Entorno Requeridas
 
 Para ejecutar el bot correctamente, es necesario configurar la siguiente variable de entorno principal:
 
 - `TELEGRAM_BOT_TOKEN`: Token HTTP API proporcionado por [@BotFather](https://t.me/BotFather) en Telegram.
 
-Adicionalmente, cada usuario configura de manera interactiva dentro del bot sus credenciales de GitHub (Personal Access Token) y de IA (Groq, Gemini u OpenAI), las cuales se almacenan de forma segura en la base de datos SQLite (`gitgram.db`).
+Adicionalmente, cada usuario configura de manera interactiva dentro del bot sus credenciales de GitHub (Personal Access Token) y de IA (Groq, Gemini u OpenAI). Estas credenciales se almacenan en SQLite (`gitgram.db`), por lo que el archivo debe protegerse con permisos del sistema, cifrado de disco y copias de seguridad controladas; no debe publicarse ni compartirse.
 
 ---
 

@@ -1,5 +1,6 @@
-import os
 import logging
+import os
+import re
 import asyncio
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -51,6 +52,7 @@ WAITING_ZIP_REPO = 4
 
 # Memoria temporal para archivos ZIP pendientes de commit por usuario
 pending_zips = {}
+MAX_PENDING_ZIP_BYTES = 50 * 1024 * 1024
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -307,7 +309,10 @@ async def login_received_token(update: Update, context: ContextTypes.DEFAULT_TYP
     user_id = update.effective_user.id
     alias = context.user_data.get('github_alias', 'default')
     token = update.message.text.strip()
-
+    try:
+        await update.message.delete()
+    except Exception:
+        logger.info("No se pudo borrar el mensaje de PAT; el bot necesita permisos de administración.")
     gh_service = GitHubService(token)
     res = gh_service.verify_token()
 
@@ -371,7 +376,10 @@ async def setup_ai_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     provider = context.user_data.get('ai_provider', 'groq')
     api_key = update.message.text.strip()
-
+    try:
+        await update.message.delete()
+    except Exception:
+        logger.info("No se pudo borrar el mensaje de API key; el bot necesita permisos de administración.")
     notify_admin(f"🤖 IA configurada ({provider.upper()}) por usuario `{user_id}`.")
 
     AIConfig.delete().where(AIConfig.user_id == user_id).execute()
@@ -431,8 +439,12 @@ async def account_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --- Manejo de Documentos ZIP para Commits ---
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     document = update.message.document
-    if not document.file_name.endswith('.zip'):
-        await update.message.reply_text("⚠️ Por favor, envía un archivo con extensión `.zip`.", parse_mode="Markdown")
+    filename = (document.file_name or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+\.zip", filename, re.IGNORECASE):
+        await update.message.reply_text("⚠️ El nombre del ZIP contiene caracteres no permitidos.", parse_mode="Markdown")
+        return
+    if document.file_size and document.file_size > MAX_PENDING_ZIP_BYTES:
+        await update.message.reply_text("⚠️ El ZIP supera el límite de 50 MB.", parse_mode="Markdown")
         return
 
     user_id = update.effective_user.id
@@ -443,12 +455,15 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     file = await context.bot.get_file(document.file_id)
     file_bytes = await file.download_as_bytearray()
+    if len(file_bytes) > MAX_PENDING_ZIP_BYTES:
+        await update.message.reply_text("⚠️ El ZIP supera el límite de 50 MB.", parse_mode="Markdown")
+        return
 
     pending_zips[user_id] = bytes(file_bytes)
-    notify_admin(f"📦 Archivo ZIP `{document.file_name}` recibido de usuario `{user_id}`.")
+    notify_admin(f"📦 Archivo ZIP `{filename}` recibido de usuario `{user_id}`.")
 
     await update.message.reply_text(
-        f"📦 Archivo `{document.file_name}` recibido.\n\n"
+        f"📦 Archivo `{filename}` recibido.\n\n"
         f"Por favor, indica el repositorio destino en formato `usuario/repositorio` (ej: `tu-usuario/mi-repo`):",
         parse_mode="Markdown"
     )
@@ -465,6 +480,7 @@ async def receive_zip_repo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     account = GitHubAccount.get_or_none(GitHubAccount.user_id == user_id, GitHubAccount.is_active == True)
     if not account:
+        pending_zips.pop(user_id, None)
         await update.message.reply_text("❌ Cuenta de GitHub no encontrada.", parse_mode="Markdown")
         return ConversationHandler.END
 

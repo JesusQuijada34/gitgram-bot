@@ -1,6 +1,41 @@
 import io
+import re
 import zipfile
+from pathlib import PurePosixPath
 from github import Github, GithubException
+
+MAX_ZIP_BYTES = 50 * 1024 * 1024
+MAX_MEMBER_BYTES = 10 * 1024 * 1024
+MAX_TOTAL_BYTES = 40 * 1024 * 1024
+
+
+def _safe_repo_name(value: str) -> str:
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", value or ""):
+        raise ValueError("Nombre de repositorio inválido")
+    return value
+
+
+def _safe_branch(value: str) -> str:
+    if not re.fullmatch(r"[A-Za-z0-9._/-]+", value or "") or ".." in value:
+        raise ValueError("Nombre de rama inválido")
+    return value
+
+
+def _safe_zip_path(filename: str) -> str:
+    path = PurePosixPath(filename)
+    if path.is_absolute() or ".." in path.parts:
+        raise ValueError(f"Ruta insegura en ZIP: {filename}")
+    parts = [part for part in path.parts if part not in ("", ".")]
+    if not parts:
+        raise ValueError("Ruta vacía en ZIP")
+    # GitHub branch archives commonly contain one root directory.
+    if len(parts) > 1:
+        parts = parts[1:]
+    clean = "/".join(parts)
+    if not clean or clean.startswith("/") or ".." in PurePosixPath(clean).parts:
+        raise ValueError(f"Ruta insegura en ZIP: {filename}")
+    return clean
+
 
 class GitHubService:
     def __init__(self, token: str):
@@ -15,50 +50,43 @@ class GitHubService:
         except GithubException as e:
             return {"success": False, "error": str(e)}
 
-    def commit_zip_content(self, repo_name: str, zip_bytes: bytes, commit_message: str = "Update from gittgiambot", branch: str = "main"):
-        """Recibe un .zip en memoria, extrae su contenido y hace commit en el repo especificado."""
+    def commit_zip_content(self, repo_name: str, zip_bytes: bytes, commit_message: str = "Update from gitgram-bot", branch: str = "main"):
+        """Valida un ZIP y actualiza sus archivos en un repositorio autorizado."""
         try:
+            repo_name = _safe_repo_name(repo_name)
+            branch = _safe_branch(branch)
+            if not isinstance(zip_bytes, (bytes, bytearray)) or len(zip_bytes) > MAX_ZIP_BYTES:
+                raise ValueError("El ZIP supera el límite permitido")
             repo = self.client.get_repo(repo_name)
-        except GithubException as e:
-            return {"success": False, "error": f"No se pudo encontrar el repositorio '{repo_name}': {str(e)}"}
+        except (ValueError, GithubException) as error:
+            return {"success": False, "error": str(error)}
 
+        total_bytes = 0
         try:
-            with zipfile.ZipFile(io.BytesIO(zip_bytes)) as z:
-                # Obtener la referencia de la rama actual o crear commit
-                for filename in z.namelist():
-                    if z.getinfo(filename).is_dir():
+            with zipfile.ZipFile(io.BytesIO(zip_bytes)) as archive:
+                for info in archive.infolist():
+                    if info.is_dir():
                         continue
-                    
-                    file_content = z.read(filename)
-                    # Limpiar rutas relativas si vienen con carpeta raíz en el zip
-                    clean_path = filename.split('/', 1)[-1] if '/' in filename else filename
-                    if not clean_path:
-                        continue
-
-                    # Intentar actualizar o crear el archivo
+                    if info.file_size > MAX_MEMBER_BYTES:
+                        raise ValueError(f"Archivo demasiado grande en ZIP: {info.filename}")
+                    total_bytes += info.file_size
+                    if total_bytes > MAX_TOTAL_BYTES:
+                        raise ValueError("El contenido total del ZIP supera el límite permitido")
+                    clean_path = _safe_zip_path(info.filename)
+                    file_content = archive.read(info)
                     try:
-                        try:
-                            contents = repo.get_contents(clean_path, ref=branch)
-                            repo.update_file(
-                                path=clean_path,
-                                message=f"{commit_message}: update {clean_path}",
-                                content=file_content,
-                                sha=contents.sha,
-                                branch=branch
-                            )
-                        except Exception:
-                            repo.create_file(
-                                path=clean_path,
-                                message=f"{commit_message}: create {clean_path}",
-                                content=file_content,
-                                branch=branch
-                            )
-                    except Exception as ex:
-                        print(f"Error procesando archivo {clean_path}: {ex}")
-
+                        contents = repo.get_contents(clean_path, ref=branch)
+                    except GithubException as error:
+                        if error.status != 404:
+                            raise
+                        repo.create_file(path=clean_path, message=f"{commit_message}: create {clean_path}", content=file_content, branch=branch)
+                    else:
+                        if isinstance(contents, list):
+                            raise ValueError(f"La ruta apunta a un directorio: {clean_path}")
+                        repo.update_file(path=clean_path, message=f"{commit_message}: update {clean_path}", content=file_content, sha=contents.sha, branch=branch)
             return {"success": True, "message": f"Commit exitoso en {repo_name} ({branch})."}
-        except Exception as e:
-            return {"success": False, "error": f"Error procesando el archivo ZIP: {str(e)}"}
+        except Exception as error:
+            return {"success": False, "error": f"Error procesando el archivo ZIP: {error}"}
 
     def get_recent_notifications(self):
         """Consulta eventos recientes de Push, Pull Requests (abiertos y cerrados) e Issues en los repositorios del usuario."""
