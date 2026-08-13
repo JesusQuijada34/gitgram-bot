@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <app>
-  <publisher>Jesusquijada34</publisher>
+  <publisher>influent</publisher>
   <app>gitgram-bot</app>
   <name>Gitgram Telegram GitHub Bot</name>
-  <version>v1.0-26.08-21.56-AlphaCube</version>
-  <correlationid>d89c00a8dd498a513b807accc8993d1c4e77bba1441eaf6cf4c88f538bef66ae</correlationid>
+  <version>v1.0-26.08-21.56</version>
+  <correlationid>7067aa4041849d2e011341de7b107a0e61d42bd86cb33c1ca0b760c0f4b3cc4e</correlationid>
   <rate>Todas las edades</rate>
   <author>JesusQuijada34</author>
   <platform>AlphaCube</platform>
